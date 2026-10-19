@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,7 +10,7 @@ import (
 // version 由构建时通过 -ldflags "-X main.version=..." 注入
 var version = "dev"
 
-func setupRouter() *gin.Engine {
+func setupRouter(cfg Config) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -30,18 +29,26 @@ func setupRouter() *gin.Engine {
 			})
 		})
 	}
+
+	registerAPIProxy(r, "/api/v1/chat", cfg.ChatURL)
+	registerAPIProxy(r, "/api/v1/reader", cfg.ReaderURL)
+	registerAPIProxy(r, "/api/v1/game", cfg.GameURL)
+	registerAPIProxy(r, "/api/v1/music", cfg.MusicURL)
+	registerAPIProxy(r, "/api/v1/user", cfg.UserURL)
+	registerProxy(r, "/ws/chat", cfg.ChatURL)
+
 	return r
 }
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	cfg := LoadConfig()
 
 	gin.SetMode(gin.ReleaseMode)
-	log.Printf("tf-gateway %s listening on :%s", version, port)
-	if err := setupRouter().Run(":" + port); err != nil {
+	log.Printf("tf-gateway %s listening on :%s", version, cfg.Port)
+	log.Printf(
+		"upstreams: chat=%s reader=%s game=%s music=%s user=%s",
+		cfg.ChatURL, cfg.ReaderURL, cfg.GameURL, cfg.MusicURL, cfg.UserURL)
+	if err := setupRouter(cfg).Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server exited: %v", err)
 	}
 }

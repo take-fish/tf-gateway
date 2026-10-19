@@ -2,15 +2,31 @@
 
 FishMatrix（摸鱼矩阵）统一网关服务 —— 基于 Go + Gin，单二进制部署。
 
-- 角色：系统统一入口，后续承接路由转发、权限校验、流量伪装
+- 角色：系统统一入口、按服务前缀反向代理、WebSocket 透传
 - 端口：`8080`（可用 `PORT` 环境变量覆盖）
 - 健康检查：`GET /healthz`
+
+## 路由
+
+| 路径 | 上游环境变量 | 默认值 |
+|---|---|---|
+| `/api/v1/chat/**` | `TF_CHAT_URL` | `http://127.0.0.1:8102` |
+| `/api/v1/reader/**` | `TF_READER_URL` | `http://127.0.0.1:8103` |
+| `/api/v1/game/**` | `TF_GAME_URL` | `http://127.0.0.1:8104` |
+| `/api/v1/music/**` | `TF_MUSIC_URL` | `http://127.0.0.1:8105` |
+| `/api/v1/user/**` | `TF_USER_URL` | `http://127.0.0.1:8101` |
+| `/ws/chat` | 同 chat | WebSocket Upgrade 透传 |
+
+- 使用 Go 标准库 `httputil.ReverseProxy`，保留路径、query、请求头与 Upgrade 头
+- 上游不可达返回 `502 {"error":"BAD_GATEWAY","message":"upstream unavailable"}`
+- 不提供 CORS：生产由 nginx 同源代理，开发由 Vite 代理
 
 ## 本地开发
 
 ```bash
-go run .            # 启动开发服务
-go test ./...       # 运行测试
+# 先启动需要的 Java 服务（默认本机 8101-8105）
+go run .            # 启动网关
+go test ./...       # 运行测试（含 WebSocket 101 转发）
 golangci-lint run   # 静态检查（需安装 golangci-lint）
 ```
 
