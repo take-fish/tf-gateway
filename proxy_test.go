@@ -15,7 +15,7 @@ import (
 func TestProxyForwardsPathAndQuery(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"path":%q,"query":%q}`, r.URL.Path, r.URL.RawQuery)
+		_, _ = fmt.Fprintf(w, `{"path":%q,"query":%q}`, r.URL.Path, r.URL.RawQuery)
 	}))
 	defer upstream.Close()
 
@@ -26,7 +26,7 @@ func TestProxyForwardsPathAndQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request gateway: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	body := string(bodyBytes)
 
@@ -49,7 +49,7 @@ func TestProxyReturnsBadGateway(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request gateway: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	body := string(bodyBytes)
 
@@ -77,7 +77,7 @@ func TestProxyWebSocketUpgrade(t *testing.T) {
 			t.Errorf("hijack failed: %v", err)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		_, _ = buffer.WriteString("HTTP/1.1 101 Switching Protocols\r\n")
 		_, _ = buffer.WriteString("Upgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
 		_ = buffer.Flush()
@@ -93,7 +93,7 @@ func TestProxyWebSocketUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial gateway: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 	_, _ = fmt.Fprintf(
