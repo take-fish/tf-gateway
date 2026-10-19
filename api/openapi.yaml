@@ -1,8 +1,18 @@
 openapi: 3.0.3
 info:
   title: tf-gateway API
-  version: 0.1.0
-  description: FishMatrix 统一网关接口契约（与实现同仓演进）
+  version: 0.2.0
+  description: |
+    FishMatrix 统一网关：健康检查、伪装指标、按前缀反向代理到业务服务，并透传 WebSocket。
+
+    代理规则（保留原始路径与 query）：
+    - `/api/v1/chat/**`    → `TF_CHAT_URL`（默认 http://127.0.0.1:8102）
+    - `/api/v1/reader/**`  → `TF_READER_URL`（默认 http://127.0.0.1:8103）
+    - `/api/v1/game/**`    → `TF_GAME_URL`（默认 http://127.0.0.1:8104）
+    - `/api/v1/music/**`   → `TF_MUSIC_URL`（默认 http://127.0.0.1:8105）
+    - `/api/v1/user/**`    → `TF_USER_URL`（默认 http://127.0.0.1:8101）
+    - `/ws/chat`           → chat 上游，支持 WebSocket Upgrade
+
 paths:
   /healthz:
     get:
@@ -16,3 +26,16 @@ paths:
       responses:
         "200":
           description: 指标数据
+  /api/v1/chat/{path}:
+    get:
+      summary: 聊天服务代理示例（其余前缀同理）
+      parameters:
+        - in: path
+          name: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 上游响应
+        "502":
+          description: 上游不可用，返回 {"error":"BAD_GATEWAY","message":"upstream unavailable"}
