@@ -1,25 +1,38 @@
 openapi: 3.0.3
 info:
   title: tf-gateway API
-  version: 0.2.0
+  version: 0.3.0
   description: |
-    FishMatrix 统一网关：健康检查、伪装指标、按前缀反向代理到业务服务，并透传 WebSocket。
+    FishMatrix 统一网关：路由与实例列表来自 Nacos，按前缀/精确路径反向代理到业务服务，
+    透传 WebSocket；Nacos 不可用时回退静态 `TF_*_URL`。
 
-    代理规则（保留原始路径与 query）：
-    - `/api/v1/chat/**`    → `TF_CHAT_URL`（默认 http://127.0.0.1:8102）
-    - `/api/v1/reader/**`  → `TF_READER_URL`（默认 http://127.0.0.1:8103）
-    - `/api/v1/game/**`    → `TF_GAME_URL`（默认 http://127.0.0.1:8104）
-    - `/api/v1/music/**`   → `TF_MUSIC_URL`（默认 http://127.0.0.1:8105）
-    - `/api/v1/user/**`    → `TF_USER_URL`（默认 http://127.0.0.1:8101）
-    - `/ws/chat`           → chat 上游，支持 WebSocket Upgrade
+    默认路由（保留原始路径与 query）：
+    - `/api/v1/user/**`    → `tf-user`
+    - `/api/v1/chat/**`    → `tf-chat`
+    - `/api/v1/reader/**`  → `tf-reader`
+    - `/api/v1/game/**`    → `tf-game`
+    - `/api/v1/music/**`   → `tf-music`
+    - `/ws/chat`           → `tf-chat`，支持 WebSocket Upgrade
+
+    路由配置：Nacos `dataId=tf-gateway.yaml`、`group=FM`、namespace `fm-prod|fm-test`。
 
 paths:
   /healthz:
     get:
-      summary: 健康检查
+      summary: 健康检查（ok / degraded / failed）
       responses:
         "200":
-          description: 服务正常
+          description: 路由可用，返回 Nacos 状态与 routeVersion
+        "503":
+          description: 无可用路由
+  /readyz:
+    get:
+      summary: 就绪检查
+      responses:
+        "200":
+          description: 至少有一份有效路由
+        "503":
+          description: 尚未加载路由
   /api/v1/monitor/metrics:
     get:
       summary: 网关指标（伪装路径）
