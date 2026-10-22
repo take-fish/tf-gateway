@@ -3,7 +3,7 @@ package nacos
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -237,7 +237,7 @@ func (d *Discovery) markError(err error) {
 	d.state = "degraded"
 	d.lastError = err.Error()
 	d.mu.Unlock()
-	log.Printf("level=warn component=nacos-discovery error=%q", err.Error())
+	slog.Warn("nacos discovery degraded", "event", "nacos.discovery", "component", "nacos-discovery", "error", err.Error())
 }
 
 func (d *Discovery) unsubscribeAll() {

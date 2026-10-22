@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -60,7 +60,7 @@ func NewApp(cfg Config) *App {
 // Start 在后台连接 Nacos Config 与 Discovery。
 func (a *App) Start(ctx context.Context) {
 	if !a.cfg.DiscoveryEnabled {
-		log.Printf("level=info component=nacos discovery=disabled fallback=static")
+		slog.Info("nacos discovery disabled", "event", "nacos.discovery", "component", "nacos", "fallback", "static")
 		return
 	}
 	settings := nacos.Settings{
@@ -92,7 +92,7 @@ func (a *App) runDiscovery(ctx context.Context, settings nacos.Settings) {
 			return
 		}
 		a.discoveryError.Set(err.Error())
-		log.Printf("level=warn component=nacos-discovery error=%q retry_in=5s", err.Error())
+		slog.Warn("nacos discovery connect failed", "event", "nacos.discovery", "component", "nacos-discovery", "error", err.Error(), "retry_in", "5s")
 		timer := time.NewTimer(5 * time.Second)
 		select {
 		case <-ctx.Done():
@@ -121,7 +121,7 @@ func (a *App) SetSnapshot(snapshot *route.Snapshot) {
 	a.proxy.UpdateTransport(snapshot.HTTP())
 	a.configState.Set("connected")
 	a.configError.Set("")
-	log.Printf("level=info component=gateway route_version=%s routes=%d", snapshot.RouteVersion(), snapshot.Count())
+	slog.Info("route snapshot applied", "event", "gateway.routes", "component", "gateway", "route_version", snapshot.RouteVersion(), "routes", snapshot.Count())
 }
 
 func (a *App) setConfigError(err error) {
@@ -131,7 +131,7 @@ func (a *App) setConfigError(err error) {
 	}
 	a.configState.Set("degraded")
 	a.configError.Set(err.Error())
-	log.Printf("level=warn component=nacos-config error=%q fallback=last_snapshot", err.Error())
+	slog.Warn("nacos config unavailable", "event", "nacos.config", "component", "nacos-config", "error", err.Error(), "fallback", "last_snapshot")
 }
 
 // Snapshot 返回当前路由快照。

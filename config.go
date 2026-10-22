@@ -9,6 +9,9 @@ import (
 type Config struct {
 	Port string
 
+	Environment string
+	LogLevel    string
+
 	NacosAddr      string
 	NacosNamespace string
 	NacosUsername  string
@@ -27,6 +30,8 @@ type Config struct {
 func LoadConfig() Config {
 	return Config{
 		Port:             getenv("PORT", "8080"),
+		Environment:      getenv("APP_ENV", "production"),
+		LogLevel:         getenv("LOG_LEVEL", "info"),
 		NacosAddr:        getenv("NACOS_ADDR", "127.0.0.1:8848"),
 		NacosNamespace:   getenv("NACOS_NAMESPACE", "fm-prod"),
 		NacosUsername:    firstNonEmpty(os.Getenv("GATEWAY_NACOS_USERNAME"), os.Getenv("NACOS_USERNAME"), "nacos"),
