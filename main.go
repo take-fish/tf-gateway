@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +15,7 @@ var version = "dev"
 
 func main() {
 	cfg := LoadConfig()
+	logger := newLogger(cfg)
 	app := NewApp(cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -33,16 +33,22 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("level=warn component=gateway shutdown_error=%q", err.Error())
+			logger.Warn("gateway shutdown failed", "event", "gateway.shutdown", "component", "gateway", "error", err.Error())
 		}
 	}()
 
-	log.Printf("level=info component=gateway version=%s port=%s namespace=%s discovery_enabled=%t fallback_targets=%d",
-		version, cfg.Port, cfg.NacosNamespace, cfg.DiscoveryEnabled, len(cfg.Static))
+	logger.Info("gateway starting",
+		"event", "gateway.start",
+		"component", "gateway",
+		"port", cfg.Port,
+		"namespace", cfg.NacosNamespace,
+		"discovery_enabled", cfg.DiscoveryEnabled,
+		"fallback_targets", len(cfg.Static))
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server exited: %v", err)
+		logger.Error("server exited", "event", "gateway.exit", "component", "gateway", "error", err.Error())
+		os.Exit(1)
 	}
-	log.Printf("level=info component=gateway stopped")
+	logger.Info("gateway stopped", "event", "gateway.stop", "component", "gateway")
 }
 
 func newRouter(app *App) http.Handler {
