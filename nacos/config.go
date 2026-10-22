@@ -3,7 +3,7 @@ package nacos
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -87,7 +87,7 @@ func (w *ConfigWatcher) Run(ctx context.Context) {
 			OnChange: func(_, _, _, data string) {
 				if err := w.apply(data); err != nil {
 					w.fail(err)
-					log.Printf("level=error component=nacos-config error=%q", err.Error())
+					slog.Error("nacos config apply failed", "event", "nacos.config", "component", "nacos-config", "error", err.Error())
 					return
 				}
 				w.mu.Lock()
@@ -117,7 +117,7 @@ func (w *ConfigWatcher) apply(content string) error {
 	if w.onSnapshot != nil {
 		w.onSnapshot(snapshot)
 	}
-	log.Printf("level=info component=nacos-config route_version=%s routes=%d", snapshot.RouteVersion(), snapshot.Count())
+	slog.Info("nacos config applied", "event", "nacos.config", "component", "nacos-config", "route_version", snapshot.RouteVersion(), "routes", snapshot.Count())
 	return nil
 }
 
