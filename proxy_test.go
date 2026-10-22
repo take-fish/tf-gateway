@@ -392,3 +392,28 @@ func (f *flakyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func (f *flakyTransport) CloseIdleConnections() {}
+
+func TestGatewayDoesNotDuplicateTraceHeaders(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 模拟 Java 服务回写链路响应头。
+		w.Header().Set("X-Trace-ID", r.Header.Get("X-Trace-ID"))
+		w.Header().Set("X-Request-ID", r.Header.Get("X-Request-ID"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	gateway := httptest.NewServer(newRouter(testApp(map[string]string{"tf-chat": upstream.URL})))
+	defer gateway.Close()
+
+	resp, err := http.Get(gateway.URL + "/api/v1/chat/groups")
+	if err != nil {
+		t.Fatalf("request gateway: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	for _, name := range []string{"X-Trace-ID", "X-Request-ID"} {
+		if values := resp.Header.Values(name); len(values) != 1 {
+			t.Fatalf("%s values = %v, want exactly one", name, values)
+		}
+	}
+}

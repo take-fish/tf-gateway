@@ -57,12 +57,21 @@ func NewProxy(app *App) *Proxy {
 	p := &Proxy{app: app}
 	p.setTransport(newTransport(app.Snapshot().HTTP()))
 	p.reverse = &httputil.ReverseProxy{
-		Rewrite:       p.rewrite,
-		Transport:     p,
-		FlushInterval: -1,
-		ErrorHandler:  p.handleError,
+		Rewrite:        p.rewrite,
+		ModifyResponse: stripUpstreamTraceHeaders,
+		Transport:      p,
+		FlushInterval:  -1,
+		ErrorHandler:   p.handleError,
 	}
 	return p
+}
+
+// stripUpstreamTraceHeaders 丢弃上游回写的链路响应头。
+// ReverseProxy 复制响应头时使用 Add 而不是 Set，若不剔除，网关与上游各写一份，客户端会看到重复的 X-Trace-ID。
+func stripUpstreamTraceHeaders(resp *http.Response) error {
+	resp.Header.Del("X-Trace-ID")
+	resp.Header.Del("X-Request-ID")
+	return nil
 }
 
 // RoundTrip 始终使用当前快照对应的 Transport。
