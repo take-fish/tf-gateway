@@ -19,6 +19,7 @@ type App struct {
 	snapshot atomic.Pointer[route.Snapshot]
 	resolver *resolver.Resolver
 	proxy    *Proxy
+	auth     Authenticator
 
 	discovery *nacos.Discovery
 	watcher   *nacos.ConfigWatcher
@@ -53,6 +54,7 @@ func NewApp(cfg Config) *App {
 	app.discovery = discovery
 	app.resolver = resolver.New(discoveryProvider, resolver.StaticTargets(cfg.Static))
 	app.resolver.SetFallbackEnabled(snapshot.FallbackEnabled())
+	app.auth = newGatewayAuth(cfg, app.resolver)
 	app.proxy = NewProxy(app)
 	return app
 }

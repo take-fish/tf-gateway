@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -26,6 +27,7 @@ const (
 	targetKey contextKey = iota
 	routeKey
 	attemptKey
+	identityHeadersKey
 )
 
 // attemptCounter 记录当前请求已经重试的次数，访问日志与重试日志共用同一个计数。
@@ -174,6 +176,37 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	routeID = matched.ID
 	targetService = matched.Service
 
+	// 无论是否鉴权，都先剥离客户端伪造的内部身份头。
+	stripInboundIdentity(r.Header)
+
+	var signedHeaders map[string]string
+	if p.app.cfg.AuthEnabled && !matched.Websocket &&
+		!isPublicPath(r.URL.Path, p.app.cfg.AuthPublicPaths) &&
+		!strings.EqualFold(r.Method, http.MethodOptions) {
+		token := bearerToken(r.Header.Get("Authorization"))
+		if token == "" {
+			writeError(recorder, r, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+			return
+		}
+		identity, authErr := p.app.auth.Authenticate(r.Context(), token)
+		if authErr != nil {
+			if errors.Is(authErr, errUnauthorized) {
+				writeError(recorder, r, http.StatusUnauthorized, "UNAUTHORIZED", "登录已失效，请重新登录")
+			} else {
+				writeError(recorder, r, http.StatusServiceUnavailable, "AUTH_UNAVAILABLE", "登录校验服务暂不可用，请稍后重试")
+			}
+			return
+		}
+		headers, signErr := signIdentity(p.app.cfg.AuthSecret, identity,
+			time.Now().Add(identityTTLSeconds*time.Second).Unix())
+		if signErr != nil {
+			slog.Error("identity signing failed", "event", "gateway.auth_config", "component", "gateway", "error", signErr.Error())
+			writeError(recorder, r, http.StatusServiceUnavailable, "AUTH_CONFIG_MISSING", "网关身份签名未配置")
+			return
+		}
+		signedHeaders = headers
+	}
+
 	result, err := p.app.resolver.Resolve(matched.Service)
 	if err != nil {
 		slog.Warn("no healthy instance",
@@ -193,6 +226,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), targetKey, result)
 	ctx = context.WithValue(ctx, routeKey, matched)
 	ctx = context.WithValue(ctx, attemptKey, attemptsState)
+	if signedHeaders != nil {
+		ctx = context.WithValue(ctx, identityHeadersKey, signedHeaders)
+	}
 	out := r.WithContext(ctx)
 	out.Header = r.Header.Clone()
 
@@ -223,6 +259,12 @@ func (p *Proxy) rewrite(pr *httputil.ProxyRequest) {
 	pr.Out.Header.Set("X-Trace-ID", trace.TraceID)
 	pr.Out.Header.Del("tracestate")
 	pr.Out.Header.Set("X-Gateway-Attempt", strconv.Itoa(attempts))
+
+	if headers, ok := pr.In.Context().Value(identityHeadersKey).(map[string]string); ok {
+		for name, value := range headers {
+			pr.Out.Header.Set(name, value)
+		}
+	}
 }
 
 func (p *Proxy) handleError(w http.ResponseWriter, r *http.Request, err error) {

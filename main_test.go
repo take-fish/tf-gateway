@@ -11,6 +11,7 @@ func testApp(static map[string]string) *App {
 	return NewApp(Config{
 		Port:             "0",
 		DiscoveryEnabled: false,
+		AuthEnabled:      false,
 		Static:           static,
 	})
 }
