@@ -3,6 +3,7 @@
 FishMatrix（摸鱼矩阵）统一网关 —— Go 标准库 HTTP 反向代理，路由与实例列表来自 Nacos，启动不依赖 Nacos 可用。
 
 - 角色：统一入口、按路由前缀反向代理、WebSocket 透传、按服务名做实例发现
+- 认证：校验 Bearer token，向用户中台确认身份，向下游注入 HMAC 签名的 `X-FM-*` 身份头
 - 端口：`8080`（`PORT` 覆盖）
 - 健康检查：`GET /healthz`、`GET /readyz`
 - 依赖：Go 1.25；`nacos-sdk-go/v2`
@@ -76,6 +77,35 @@ gateway:
 | `GATEWAY_DISCOVERY_GROUP` | `DEFAULT_GROUP` | 服务发现分组 |
 | `GATEWAY_DISCOVERY_ENABLED` | `true` | 关闭后只用静态地址 |
 | `TF_USER_URL` 等 | `http://127.0.0.1:810x` | 静态回退地址 |
+| `GATEWAY_AUTH_ENABLED` | `true` | 是否启用统一认证 |
+| `FM_IDENTITY_SECRET` | 空 | 身份头 HMAC 密钥；启用认证时必填，缺失会导致受保护请求返回 503 |
+| `GATEWAY_AUTH_USER_SERVICE` | `tf-user` | 用于 introspection 的服务名 |
+| `GATEWAY_AUTH_CACHE_SECONDS` | `30` | token 校验结果内存缓存 TTL |
+| `GATEWAY_AUTH_CONNECT_TIMEOUT_MS` | `800` | 调用用户中台连接超时 |
+| `GATEWAY_AUTH_READ_TIMEOUT_MS` | `2000` | 调用用户中台读取超时 |
+| `GATEWAY_AUTH_PUBLIC_PATHS` | 空 | 追加公开路径，逗号分隔，支持 `/**` 与 `*` |
+
+## 统一认证
+
+受保护请求必须携带 `Authorization: Bearer <token>`。网关在命中路由后、解析上游实例前完成校验，未通过不会触达业务服务。
+
+1. 网关调用 `tf-user` 的 `GET /api/v1/user/auth/me` 校验会话并获取角色与权限，成功结果按 token 的 SHA-256 缓存 `GATEWAY_AUTH_CACHE_SECONDS` 秒。
+2. 网关生成规范串并做 HMAC-SHA256 签名，向下游注入以下请求头（客户端的同名头一律先剥离）：
+   - `X-FM-User-Id`、`X-FM-Username`、`X-FM-Nickname`、`X-FM-Role`
+   - `X-FM-Roles`、`X-FM-Permissions`（逗号分隔）
+   - `X-FM-Exp`（epoch 秒，默认 120 秒有效）、`X-FM-Signature`
+3. 规范串：`uid|b64url(username)|b64url(nickname)|b64url(role)|roles|permissions|exp`，Base64 均为 URL-safe 无填充。业务服务通过 `tf-common` 的 `IdentitySigner` 校验，不自行信任请求头。
+4. 登录、注册、`/meta`、各服务 `/health`、用户中台管理页静态资源与监控接口默认公开；WebSocket 路由由业务服务在握手时校验 ticket，网关不拦截。
+
+错误码：
+
+| 状态 | 错误码 | 说明 |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | 缺少 token 或会话已失效 |
+| 503 | `AUTH_UNAVAILABLE` | 用户中台不可用，按 fail-closed 处理 |
+| 503 | `AUTH_CONFIG_MISSING` | 网关未配置 `FM_IDENTITY_SECRET` |
+
+密钥只通过环境变量注入，不得写入 Nacos 配置或仓库。网关与各业务服务必须使用同一个密钥。
 
 ## 健康检查
 
@@ -87,8 +117,10 @@ gateway:
 
 | 状态 | 错误码 |
 |---|---|
+| 401 | `UNAUTHORIZED` |
 | 404 | `NOT_FOUND` |
 | 502 | `BAD_GATEWAY` |
+| 503 | `AUTH_UNAVAILABLE` / `AUTH_CONFIG_MISSING` |
 | 503 | `SERVICE_UNAVAILABLE` |
 
 ## 本地开发

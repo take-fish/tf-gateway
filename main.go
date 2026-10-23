@@ -37,12 +37,18 @@ func main() {
 		}
 	}()
 
+	if cfg.AuthEnabled && cfg.AuthSecret == "" {
+		logger.Error("gateway auth enabled but FM_IDENTITY_SECRET is empty; protected requests will fail",
+			"event", "gateway.auth_config", "component", "gateway")
+	}
 	logger.Info("gateway starting",
 		"event", "gateway.start",
 		"component", "gateway",
 		"port", cfg.Port,
 		"namespace", cfg.NacosNamespace,
 		"discovery_enabled", cfg.DiscoveryEnabled,
+		"auth_enabled", cfg.AuthEnabled,
+		"auth_secret_configured", cfg.AuthSecret != "",
 		"fallback_targets", len(cfg.Static))
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("server exited", "event", "gateway.exit", "component", "gateway", "error", err.Error())
