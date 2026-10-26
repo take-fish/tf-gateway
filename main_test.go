@@ -28,8 +28,8 @@ func TestHealthz(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &health); err != nil {
 		t.Fatalf("decode health: %v", err)
 	}
-	if health.Routes != 6 {
-		t.Fatalf("routes = %d, want 6", health.Routes)
+	if health.Routes != 7 {
+		t.Fatalf("routes = %d, want 7", health.Routes)
 	}
 	if health.Nacos.Config != "disabled" || health.Nacos.Discovery != "disabled" {
 		t.Fatalf("unexpected nacos state: %+v", health.Nacos)
