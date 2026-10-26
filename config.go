@@ -46,6 +46,8 @@ var DefaultAuthPublicPaths = []string{
 	"/api/v1/user/auth/login",
 	"/api/v1/user/auth/register",
 	"/api/v1/user/meta",
+	// 头像属于公开展示的身份信息，<img> 无法携带 Authorization
+	"/api/v1/user/avatars/**",
 	"/api/v1/*/health",
 	"/api/v1/*/meta",
 	"/api/v1/user/admin",
