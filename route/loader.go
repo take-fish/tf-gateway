@@ -78,6 +78,7 @@ func DefaultConfig() Config {
 				{ID: "user", Prefix: "/api/v1/user", Service: "tf-user"},
 				{ID: "chat", Prefix: "/api/v1/chat", Service: "tf-chat"},
 				{ID: "chat-ws", Path: "/ws/chat", Service: "tf-chat", Websocket: true},
+				{ID: "game-ws", Path: "/ws/game", Service: "tf-game", Websocket: true},
 				{ID: "reader", Prefix: "/api/v1/reader", Service: "tf-reader"},
 				{ID: "game", Prefix: "/api/v1/game", Service: "tf-game"},
 				{ID: "music", Prefix: "/api/v1/music", Service: "tf-music"},

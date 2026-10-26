@@ -13,6 +13,7 @@ info:
     - `/api/v1/game/**`    → `tf-game`
     - `/api/v1/music/**`   → `tf-music`
     - `/ws/chat`           → `tf-chat`，支持 WebSocket Upgrade
+    - `/ws/game`           → `tf-game`，支持 WebSocket Upgrade
 
     路由配置：Nacos `dataId=tf-gateway.yaml`、`group=FM`、namespace `fm-prod|fm-test`。
 
