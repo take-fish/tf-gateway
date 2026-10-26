@@ -16,6 +16,9 @@ func TestSnapshotMatch(t *testing.T) {
 		{path: "/api/v1/chat/groups", id: "chat", ok: true},
 		{path: "/ws/chat", id: "chat-ws", ok: true},
 		{path: "/ws/chat/extra", ok: false},
+		{path: "/ws/game", id: "game-ws", ok: true},
+		{path: "/ws/game/extra", ok: false},
+		{path: "/api/v1/game/tournaments", id: "game", ok: true},
 		{path: "/unknown", ok: false},
 	}
 	for _, tt := range tests {

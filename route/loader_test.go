@@ -137,13 +137,16 @@ func TestParseRejectsInvalidConfigs(t *testing.T) {
 
 func TestDefaultRoutes(t *testing.T) {
 	snapshot := Default()
-	if snapshot.Count() != 6 {
-		t.Fatalf("routes = %d, want 6", snapshot.Count())
+	if snapshot.Count() != 7 {
+		t.Fatalf("routes = %d, want 7", snapshot.Count())
 	}
 	if snapshot.RouteVersion() != "default" {
 		t.Fatalf("version = %q", snapshot.RouteVersion())
 	}
 	if _, ok := snapshot.Match("/ws/chat"); !ok {
 		t.Fatal("/ws/chat should match")
+	}
+	if _, ok := snapshot.Match("/ws/game"); !ok {
+		t.Fatal("/ws/game should match")
 	}
 }
