@@ -52,6 +52,8 @@ var DefaultAuthPublicPaths = []string{
 	"/api/v1/monitor/metrics",
 	"/api/v1/user/auth/login",
 	"/api/v1/user/auth/register",
+	// 刷新令牌换访问令牌：此刻手里的 access token 已过期，必须放行
+	"/api/v1/user/auth/refresh",
 	"/api/v1/user/meta",
 	// 头像属于公开展示的身份信息，<img> 无法携带 Authorization
 	"/api/v1/user/avatars/**",
