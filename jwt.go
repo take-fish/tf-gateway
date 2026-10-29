@@ -4,8 +4,11 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/take-fish/tf-gateway/route"
 )
 
 // jwtVerifier 在网关本地验签 EdDSA（Ed25519）访问令牌，不再回调用户中台。
@@ -36,25 +39,50 @@ type jwtClaims struct {
 	Nbf   int64           `json:"nbf"`
 }
 
-func newJWTVerifier(cfg Config) *jwtVerifier {
-	if !cfg.AuthJWTEnabled {
+// newJWTVerifier 合并两处来源：Nacos 下发的 auth.jwt（优先，改配置即生效）
+// 与环境变量（兜底，Nacos 不可用时仍能验签）。
+func newJWTVerifier(cfg Config, remote route.JWTConfig) *jwtVerifier {
+	enabled := cfg.AuthJWTEnabled
+	if remote.Enabled != nil {
+		enabled = *remote.Enabled
+	}
+	if !enabled {
 		return &jwtVerifier{}
 	}
-	keys := make(map[string]ed25519.PublicKey, len(cfg.AuthJWTKeys)+1)
-	if cfg.AuthJWTPublicKey != "" {
-		if key, err := parseEd25519PublicKey(cfg.AuthJWTPublicKey); err == nil {
-			keys[cfg.AuthJWTKeyID] = key
+
+	keyID := firstNonEmpty(remote.KeyID, cfg.AuthJWTKeyID, "default")
+	issuer := firstNonEmpty(remote.Issuer, cfg.AuthJWTIssuer)
+	publicKey := firstNonEmpty(remote.PublicKey, cfg.AuthJWTPublicKey)
+
+	keys := make(map[string]ed25519.PublicKey, len(cfg.AuthJWTKeys)+len(remote.Keys)+1)
+	if publicKey != "" {
+		if key, err := parseEd25519PublicKey(publicKey); err == nil {
+			keys[keyID] = key
+		} else {
+			slog.Warn("jwt public key ignored", "event", "gateway.auth", "component", "gateway", "kid", keyID, "error", err.Error())
 		}
 	}
 	for kid, value := range cfg.AuthJWTKeys {
 		if key, err := parseEd25519PublicKey(value); err == nil {
 			keys[kid] = key
+		} else {
+			slog.Warn("jwt rotation key ignored", "event", "gateway.auth", "component", "gateway", "kid", kid, "error", err.Error())
 		}
+	}
+	for kid, value := range remote.Keys {
+		if key, err := parseEd25519PublicKey(value); err == nil {
+			keys[kid] = key
+		} else {
+			slog.Warn("jwt rotation key ignored", "event", "gateway.auth", "component", "gateway", "kid", kid, "error", err.Error())
+		}
+	}
+	if len(keys) > 0 {
+		slog.Info("jwt verification enabled", "event", "gateway.auth", "component", "gateway", "kid", keyID, "keys", len(keys))
 	}
 	return &jwtVerifier{
 		keys:       keys,
-		defaultKid: cfg.AuthJWTKeyID,
-		issuer:     cfg.AuthJWTIssuer,
+		defaultKid: keyID,
+		issuer:     issuer,
 		skew:       30,
 	}
 }

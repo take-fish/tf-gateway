@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/take-fish/tf-gateway/route"
 )
 
 func newTestKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
@@ -63,7 +65,7 @@ func validClaims() map[string]any {
 
 func TestJWTVerifyAcceptsValidToken(t *testing.T) {
 	pub, priv := newTestKey(t)
-	verifier := newJWTVerifier(testConfig(pub))
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{})
 
 	identity, err := verifier.Verify(signToken(t, priv, "k1", validClaims()))
 	if err != nil {
@@ -82,7 +84,7 @@ func TestJWTVerifyAcceptsValidToken(t *testing.T) {
 
 func TestJWTRejectsExpiredToken(t *testing.T) {
 	pub, priv := newTestKey(t)
-	verifier := newJWTVerifier(testConfig(pub))
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{})
 	claims := validClaims()
 	claims["exp"] = time.Now().Add(-10 * time.Minute).Unix()
 
@@ -93,7 +95,7 @@ func TestJWTRejectsExpiredToken(t *testing.T) {
 
 func TestJWTRejectsTamperedPayload(t *testing.T) {
 	pub, priv := newTestKey(t)
-	verifier := newJWTVerifier(testConfig(pub))
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{})
 	token := signToken(t, priv, "k1", validClaims())
 	parts := splitToken(t, token)
 	forged := parts[0] + "." +
@@ -106,7 +108,7 @@ func TestJWTRejectsTamperedPayload(t *testing.T) {
 
 func TestJWTRejectsUnsignedAlgorithm(t *testing.T) {
 	pub, _ := newTestKey(t)
-	verifier := newJWTVerifier(testConfig(pub))
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{})
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
 	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":7,"exp":9999999999}`))
 
@@ -117,7 +119,7 @@ func TestJWTRejectsUnsignedAlgorithm(t *testing.T) {
 
 func TestJWTRejectsUnknownKeyID(t *testing.T) {
 	pub, priv := newTestKey(t)
-	verifier := newJWTVerifier(testConfig(pub))
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{})
 
 	if _, err := verifier.Verify(signToken(t, priv, "unknown", validClaims())); err == nil {
 		t.Fatal("unknown kid should be rejected")
@@ -126,7 +128,7 @@ func TestJWTRejectsUnknownKeyID(t *testing.T) {
 
 func TestJWTRejectsWrongIssuer(t *testing.T) {
 	pub, priv := newTestKey(t)
-	verifier := newJWTVerifier(testConfig(pub))
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{})
 	claims := validClaims()
 	claims["iss"] = "someone-else"
 
@@ -137,7 +139,7 @@ func TestJWTRejectsWrongIssuer(t *testing.T) {
 
 func TestJWTRejectsMissingExpiry(t *testing.T) {
 	pub, priv := newTestKey(t)
-	verifier := newJWTVerifier(testConfig(pub))
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{})
 	claims := validClaims()
 	delete(claims, "exp")
 
@@ -151,7 +153,7 @@ func TestJWTKeyRotationAcceptsBothKeys(t *testing.T) {
 	newPub, newPriv := newTestKey(t)
 	cfg := testConfig(oldPub)
 	cfg.AuthJWTKeys = map[string]string{"k2": encodeKey(newPub)}
-	verifier := newJWTVerifier(cfg)
+	verifier := newJWTVerifier(cfg, route.JWTConfig{})
 
 	if _, err := verifier.Verify(signToken(t, oldPriv, "k1", validClaims())); err != nil {
 		t.Fatalf("old key rejected: %v", err)
@@ -162,7 +164,7 @@ func TestJWTKeyRotationAcceptsBothKeys(t *testing.T) {
 }
 
 func TestJWTUnconfiguredVerifier(t *testing.T) {
-	verifier := newJWTVerifier(Config{AuthJWTEnabled: true})
+	verifier := newJWTVerifier(Config{AuthJWTEnabled: true}, route.JWTConfig{})
 	if verifier.Configured() {
 		t.Fatal("verifier without keys should report unconfigured")
 	}
@@ -187,6 +189,79 @@ func TestParseKeyMap(t *testing.T) {
 	}
 	if parseKeyMap("") != nil {
 		t.Fatal("empty value should return nil")
+	}
+}
+
+func TestJWTVerifierUsesNacosConfigWhenPresent(t *testing.T) {
+	envPub, _ := newTestKey(t)
+	nacosPub, nacosPriv := newTestKey(t)
+
+	// 环境变量里是旧公钥，Nacos 下发的是新公钥：以 Nacos 为准
+	cfg := testConfig(envPub)
+	remote := route.JWTConfig{
+		KeyID:     "k9",
+		Issuer:    "fishmatrix",
+		PublicKey: encodeKey(nacosPub),
+	}
+	verifier := newJWTVerifier(cfg, remote)
+
+	if _, err := verifier.Verify(signToken(t, nacosPriv, "k9", validClaims())); err != nil {
+		t.Fatalf("nacos key rejected: %v", err)
+	}
+}
+
+func TestJWTVerifierHonoursNacosDisableSwitch(t *testing.T) {
+	pub, _ := newTestKey(t)
+	disabled := false
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{Enabled: &disabled})
+
+	if verifier.Configured() {
+		t.Fatal("nacos enabled=false should disable local verification")
+	}
+}
+
+func TestJWTVerifierMergesRotationKeys(t *testing.T) {
+	pub, priv := newTestKey(t)
+	rotatedPub, rotatedPriv := newTestKey(t)
+
+	verifier := newJWTVerifier(testConfig(pub), route.JWTConfig{
+		Keys: map[string]string{"k7": encodeKey(rotatedPub)},
+	})
+
+	if _, err := verifier.Verify(signToken(t, priv, "k1", validClaims())); err != nil {
+		t.Fatalf("env key rejected: %v", err)
+	}
+	if _, err := verifier.Verify(signToken(t, rotatedPriv, "k7", validClaims())); err != nil {
+		t.Fatalf("nacos rotation key rejected: %v", err)
+	}
+}
+
+func TestSnapshotCarriesJWTConfig(t *testing.T) {
+	snapshot, err := route.Parse([]byte(`
+version: 1
+auth:
+  jwt:
+    enabled: true
+    issuer: fishmatrix
+    key-id: k5
+    public-key: abc
+    keys:
+      k4: def
+gateway:
+  routes:
+    - id: user
+      prefix: /api/v1/user
+      service: tf-user
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	remote := snapshot.JWT()
+	if remote.KeyID != "k5" || remote.Issuer != "fishmatrix" || remote.PublicKey != "abc" {
+		t.Fatalf("unexpected jwt config: %+v", remote)
+	}
+	if remote.Keys["k4"] != "def" {
+		t.Fatalf("rotation keys missing: %+v", remote.Keys)
 	}
 }
 
