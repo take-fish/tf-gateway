@@ -74,12 +74,14 @@ func LoadConfig() Config {
 		ConfigGroup:      getenv("GATEWAY_CONFIG_GROUP", "FM"),
 		DiscoveryGroup:   getenv("GATEWAY_DISCOVERY_GROUP", "DEFAULT_GROUP"),
 		DiscoveryEnabled: getenvBool("GATEWAY_DISCOVERY_ENABLED", true),
+		// 静态兜底地址与 docker-compose 的 TF_*_URL 默认值保持一致：用 compose 服务名，
+		// 而不是 127.0.0.1——容器内回环永远指向网关自己，一旦 Nacos 发现失效会把请求打到空。
 		Static: map[string]string{
-			"tf-chat":   getenv("TF_CHAT_URL", "http://127.0.0.1:8102"),
-			"tf-reader": getenv("TF_READER_URL", "http://127.0.0.1:8103"),
-			"tf-game":   getenv("TF_GAME_URL", "http://127.0.0.1:8104"),
-			"tf-music":  getenv("TF_MUSIC_URL", "http://127.0.0.1:8105"),
-			"tf-user":   getenv("TF_USER_URL", "http://127.0.0.1:8101"),
+			"tf-chat":   getenv("TF_CHAT_URL", "http://fm-chat:8102"),
+			"tf-reader": getenv("TF_READER_URL", "http://fm-reader:8103"),
+			"tf-game":   getenv("TF_GAME_URL", "http://fm-game:8104"),
+			"tf-music":  getenv("TF_MUSIC_URL", "http://fm-music:8105"),
+			"tf-user":   getenv("TF_USER_URL", "http://fm-prod-user:8101"),
 		},
 		AuthEnabled:        getenvBool("GATEWAY_AUTH_ENABLED", true),
 		AuthSecret:         os.Getenv("FM_IDENTITY_SECRET"),
