@@ -35,6 +35,13 @@ type Config struct {
 	AuthPublicPaths    []string
 	AuthConnectTimeout time.Duration
 	AuthReadTimeout    time.Duration
+
+	// JWT 本地验签：配置公钥后优先本地校验，不再回调用户中台。
+	AuthJWTEnabled   bool
+	AuthJWTPublicKey string
+	AuthJWTKeys      map[string]string
+	AuthJWTKeyID     string
+	AuthJWTIssuer    string
 }
 
 // DefaultAuthPublicPaths 是无需网关校验 token 的路径。
@@ -90,6 +97,12 @@ func LoadConfig() Config {
 		AuthPublicPaths:    splitCSV(os.Getenv("GATEWAY_AUTH_PUBLIC_PATHS")),
 		AuthConnectTimeout: time.Duration(getenvInt("GATEWAY_AUTH_CONNECT_TIMEOUT_MS", 800)) * time.Millisecond,
 		AuthReadTimeout:    time.Duration(getenvInt("GATEWAY_AUTH_READ_TIMEOUT_MS", 2000)) * time.Millisecond,
+
+		AuthJWTEnabled:   getenvBool("GATEWAY_AUTH_JWT_ENABLED", true),
+		AuthJWTPublicKey: getenv("FM_AUTH_JWT_PUBLIC_KEY", ""),
+		AuthJWTKeys:      parseKeyMap(os.Getenv("FM_AUTH_JWT_KEYS")),
+		AuthJWTKeyID:     getenv("FM_AUTH_JWT_KEY_ID", "default"),
+		AuthJWTIssuer:    getenv("FM_AUTH_JWT_ISSUER", "fishmatrix"),
 	}
 }
 
@@ -120,10 +133,11 @@ func splitCSV(value string) []string {
 }
 
 func getenv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
 	}
-	return fallback
+	return value
 }
 
 func getenvBool(key string, fallback bool) bool {
@@ -145,4 +159,24 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// parseKeyMap 解析 kid:key,kid2:key2 形式的公钥轮换表。
+func parseKeyMap(raw string) map[string]string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	result := make(map[string]string)
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		kid, value, ok := strings.Cut(entry, ":")
+		if !ok || strings.TrimSpace(kid) == "" || strings.TrimSpace(value) == "" {
+			continue
+		}
+		result[strings.TrimSpace(kid)] = strings.TrimSpace(value)
+	}
+	return result
 }

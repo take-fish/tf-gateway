@@ -188,7 +188,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeError(recorder, r, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
 			return
 		}
-		identity, authErr := p.app.auth.Authenticate(r.Context(), token)
+		identity, authErr := p.app.authenticate(r.Context(), token)
 		if authErr != nil {
 			if errors.Is(authErr, errUnauthorized) {
 				writeError(recorder, r, http.StatusUnauthorized, "UNAUTHORIZED", "登录已失效，请重新登录")

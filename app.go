@@ -20,6 +20,7 @@ type App struct {
 	resolver *resolver.Resolver
 	proxy    *Proxy
 	auth     Authenticator
+	jwt      *jwtVerifier
 
 	discovery *nacos.Discovery
 	watcher   *nacos.ConfigWatcher
@@ -55,8 +56,17 @@ func NewApp(cfg Config) *App {
 	app.resolver = resolver.New(discoveryProvider, resolver.StaticTargets(cfg.Static))
 	app.resolver.SetFallbackEnabled(snapshot.FallbackEnabled())
 	app.auth = newGatewayAuth(cfg, app.resolver)
+	app.jwt = newJWTVerifier(cfg)
 	app.proxy = NewProxy(app)
 	return app
+}
+
+// authenticate 优先本地验签 JWT；不是 JWT（旧的不透明令牌）时才回调用户中台。
+func (a *App) authenticate(ctx context.Context, token string) (userIdentity, error) {
+	if a.jwt.Configured() && looksLikeJWT(token) {
+		return a.jwt.Verify(token)
+	}
+	return a.auth.Authenticate(ctx, token)
 }
 
 // Start 在后台连接 Nacos Config 与 Discovery。
