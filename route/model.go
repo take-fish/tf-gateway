@@ -9,6 +9,22 @@ import (
 type Config struct {
 	Version int           `yaml:"version"`
 	Gateway GatewayConfig `yaml:"gateway"`
+	// Auth 是鉴权参数：JWT 公钥由 Nacos 下发，改配置即轮换，无需重建镜像
+	Auth AuthConfig `yaml:"auth"`
+}
+
+// AuthConfig 描述网关侧的本地验签参数。
+type AuthConfig struct {
+	JWT JWTConfig `yaml:"jwt"`
+}
+
+// JWTConfig 是 Ed25519 公钥配置。keys 用于轮换期同时保留新旧两把。
+type JWTConfig struct {
+	Enabled   *bool             `yaml:"enabled"`
+	Issuer    string            `yaml:"issuer"`
+	KeyID     string            `yaml:"key-id"`
+	PublicKey string            `yaml:"public-key"`
+	Keys      map[string]string `yaml:"keys"`
 }
 
 // GatewayConfig 描述服务发现、代理、重试与路由。
@@ -59,6 +75,7 @@ type Snapshot struct {
 	Checksum      string
 	LoadedAt      time.Time
 	Gateway       GatewayConfig
+	Auth          AuthConfig
 	Routes        []Route
 
 	exact    map[string]Route
@@ -143,6 +160,14 @@ func (s *Snapshot) Retry() RetryConfig {
 		return RetryConfig{}
 	}
 	return s.Gateway.Retry
+}
+
+// JWT 返回由 Nacos 下发的本地验签配置。
+func (s *Snapshot) JWT() JWTConfig {
+	if s == nil {
+		return JWTConfig{}
+	}
+	return s.Auth.JWT
 }
 
 func boolValue(v *bool, fallback bool) bool {
