@@ -82,6 +82,8 @@ func LoadConfig() Config {
 			"tf-game":   getenv("TF_GAME_URL", "http://fm-game:8104"),
 			"tf-music":  getenv("TF_MUSIC_URL", "http://fm-music:8105"),
 			"tf-user":   getenv("TF_USER_URL", "http://fm-prod-user:8101"),
+			// Agent 与模型同机部署在 GPU 笔记本上，不能用 compose 服务名
+			"tf-agent": getenv("TF_AGENT_URL", "http://10.28.13.214:8201"),
 		},
 		AuthEnabled:        getenvBool("GATEWAY_AUTH_ENABLED", true),
 		AuthSecret:         os.Getenv("FM_IDENTITY_SECRET"),
