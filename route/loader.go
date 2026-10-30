@@ -203,6 +203,7 @@ func buildSnapshot(cfg Config, checksum string) *Snapshot {
 		Checksum:      checksum,
 		LoadedAt:      time.Now(),
 		Gateway:       cfg.Gateway,
+		Auth:          cfg.Auth,
 		Routes:        append([]Route(nil), cfg.Gateway.Routes...),
 		exact:         make(map[string]Route),
 	}
