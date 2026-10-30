@@ -20,6 +20,7 @@ type App struct {
 	resolver *resolver.Resolver
 	proxy    *Proxy
 	auth     Authenticator
+	jwt      atomic.Pointer[jwtVerifier]
 
 	discovery *nacos.Discovery
 	watcher   *nacos.ConfigWatcher
@@ -55,8 +56,17 @@ func NewApp(cfg Config) *App {
 	app.resolver = resolver.New(discoveryProvider, resolver.StaticTargets(cfg.Static))
 	app.resolver.SetFallbackEnabled(snapshot.FallbackEnabled())
 	app.auth = newGatewayAuth(cfg, app.resolver)
+	app.jwt.Store(newJWTVerifier(cfg, snapshot.JWT()))
 	app.proxy = NewProxy(app)
 	return app
+}
+
+// authenticate 优先本地验签 JWT；不是 JWT（旧的不透明令牌）时才回调用户中台。
+func (a *App) authenticate(ctx context.Context, token string) (userIdentity, error) {
+	if verifier := a.jwt.Load(); verifier.Configured() && looksLikeJWT(token) {
+		return verifier.Verify(token)
+	}
+	return a.auth.Authenticate(ctx, token)
 }
 
 // Start 在后台连接 Nacos Config 与 Discovery。
@@ -121,6 +131,8 @@ func (a *App) SetSnapshot(snapshot *route.Snapshot) {
 		a.discovery.UpdateServices(snapshot.Services())
 	}
 	a.proxy.UpdateTransport(snapshot.HTTP())
+	// Nacos 里的 auth.jwt 变化后立即重建验签器，实现不重启轮换公钥
+	a.jwt.Store(newJWTVerifier(a.cfg, snapshot.JWT()))
 	a.configState.Set("connected")
 	a.configError.Set("")
 	slog.Info("route snapshot applied", "event", "gateway.routes", "component", "gateway", "route_version", snapshot.RouteVersion(), "routes", snapshot.Count())
