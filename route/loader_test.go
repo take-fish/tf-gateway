@@ -38,14 +38,14 @@ func TestParseValidConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if snapshot.Count() != 2 {
-		t.Fatalf("routes = %d, want 2", snapshot.Count())
+	if snapshot.Count() != 3 {
+		t.Fatalf("routes = %d, want 3", snapshot.Count())
 	}
 	if snapshot.RouteVersion() == "default" || len(snapshot.RouteVersion()) < 8 {
 		t.Fatalf("unexpected route version: %s", snapshot.RouteVersion())
 	}
 	services := snapshot.Services()
-	if len(services) != 2 || services[0] != "tf-user" || services[1] != "tf-chat" {
+	if len(services) != 3 || services[0] != "tf-user" || services[1] != "tf-chat" || services[2] != "tf-agent" {
 		t.Fatalf("services = %v", services)
 	}
 }
@@ -137,8 +137,8 @@ func TestParseRejectsInvalidConfigs(t *testing.T) {
 
 func TestDefaultRoutes(t *testing.T) {
 	snapshot := Default()
-	if snapshot.Count() != 7 {
-		t.Fatalf("routes = %d, want 7", snapshot.Count())
+	if snapshot.Count() != 8 {
+		t.Fatalf("routes = %d, want 8", snapshot.Count())
 	}
 	if snapshot.RouteVersion() != "default" {
 		t.Fatalf("version = %q", snapshot.RouteVersion())
