@@ -39,7 +39,13 @@ func Parse(data []byte) (*Snapshot, error) {
 		return nil, err
 	}
 	sum := md5.Sum(data)
-	return buildSnapshot(cfg, hex.EncodeToString(sum[:])), nil
+	snapshot := buildSnapshot(cfg, hex.EncodeToString(sum[:]))
+	// 保底：Nacos 配置漏掉 agent 路由时补上，避免智能助手整页 404。
+	if _, ok := snapshot.Match("/api/v1/agent/status"); !ok {
+		cfg.Gateway.Routes = append(cfg.Gateway.Routes, Route{ID: "agent", Prefix: "/api/v1/agent", Service: "tf-agent"})
+		snapshot = buildSnapshot(cfg, hex.EncodeToString(sum[:]))
+	}
+	return snapshot, nil
 }
 
 // Default 返回内置兜底路由，用于 Nacos 不可用或配置无效时继续服务。
@@ -76,6 +82,7 @@ func DefaultConfig() Config {
 			},
 			Routes: []Route{
 				{ID: "user", Prefix: "/api/v1/user", Service: "tf-user"},
+				{ID: "agent", Prefix: "/api/v1/agent", Service: "tf-agent"},
 				{ID: "chat", Prefix: "/api/v1/chat", Service: "tf-chat"},
 				{ID: "chat-ws", Path: "/ws/chat", Service: "tf-chat", Websocket: true},
 				{ID: "game-ws", Path: "/ws/game", Service: "tf-game", Websocket: true},
